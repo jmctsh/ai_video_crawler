@@ -1,0 +1,46 @@
+# Node/Electron 通用忽略
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# TypeScript 增量构建信息
+*.tsbuildinfo
+
+# 构建产物（Vite/Electron 主进程）
+dist/
+dist-main/
+
+# 运行时工件与抓包/报告输出
+downloads/
+logs/
+
+# Playwright 相关生成目录（如有）
+ms-playwright/
+playwright-report/
+test-results/
+.vite/
+
+# 平台杂项
+.DS_Store
+Thumbs.db
+
+# 环境变量与本地配置
+.env
+.env.local
+.env.*.local
+
+# IDE/编辑器配置
+.vscode/
+.idea/
+
+# 临时/备份文件
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# 本地 ffmpeg 可执行文件（体积大，建议不提交）
+ffmpeg/
