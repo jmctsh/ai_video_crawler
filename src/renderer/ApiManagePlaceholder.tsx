@@ -12,23 +12,19 @@ const ipcRenderer: typeof import('electron').ipcRenderer | null = (() => {
   }
 })()
 
-type AgentName = 'coordinator' | 'static_parser' | 'network_capture' | 'history_compressor' | 'rag_embedding'
+type AgentName = 'coordinator' | 'static_parser' | 'network_capture'
 type AgentConfig = { name: AgentName | string; apiKey: string; modelId: string }
 
 const defaultModels: Record<AgentName, string> = {
   coordinator: 'doubao-seed-1-6-251015',
   static_parser: 'doubao-seed-1-6-251015',
   network_capture: 'doubao-seed-1-6-251015',
-  history_compressor: 'doubao-seed-1-6-251015',
-  rag_embedding: 'doubao-embedding-large',
 }
 
 const displayNames: Record<AgentName, string> = {
   coordinator: '总协调员（生成式AI）',
   static_parser: '静态解析员（生成式AI）',
   network_capture: '网络抓包员（生成式AI）',
-  history_compressor: '历史压缩员（生成式AI）',
-  rag_embedding: '向量处理（Embedding）',
 }
 
 export default function ApiManagePlaceholder() {
@@ -36,8 +32,6 @@ export default function ApiManagePlaceholder() {
     coordinator: { apiKey: '', modelId: defaultModels.coordinator },
     static_parser: { apiKey: '', modelId: defaultModels.static_parser },
     network_capture: { apiKey: '', modelId: defaultModels.network_capture },
-    history_compressor: { apiKey: '', modelId: defaultModels.history_compressor },
-    rag_embedding: { apiKey: '', modelId: defaultModels.rag_embedding },
   })
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string>('')
@@ -60,19 +54,14 @@ export default function ApiManagePlaceholder() {
         setItems((prev) => {
           const next = { ...prev }
           // 生成式：优先各自条目，其次 doubao，最后默认
-          ;(['coordinator', 'static_parser', 'network_capture', 'history_compressor'] as AgentName[]).forEach((key) => {
+          ;(['coordinator', 'static_parser', 'network_capture'] as AgentName[]).forEach((key) => {
             const exist = byName[key]
             next[key] = {
               apiKey: exist?.apiKey || doubao?.apiKey || prev[key].apiKey || '',
               modelId: exist?.modelId || doubao?.modelId || prev[key].modelId || defaultModels[key],
             }
           })
-          // 向量处理：读取 rag_embedding，否则默认
-          const rag = byName['rag_embedding']
-          next.rag_embedding = {
-            apiKey: rag?.apiKey || doubao?.apiKey || prev.rag_embedding.apiKey || '',
-            modelId: rag?.modelId || prev.rag_embedding.modelId || defaultModels.rag_embedding,
-          }
+          // 已移除“向量处理（Embedding）”卡片与模块
           return next
         })
       } catch (err) {
@@ -96,7 +85,7 @@ export default function ApiManagePlaceholder() {
         setStatus('当前在浏览器预览中，无法保存到 .env。请在 Electron 中打开应用。')
         return
       }
-      // 依次 upsert 五个条目
+      // 依次 upsert 三个条目
       for (const name of cards) {
         const payload = { name, apiKey: items[name].apiKey || '', modelId: items[name].modelId || '' }
         await ipcRenderer.invoke('agent:upsert', payload)
@@ -146,7 +135,7 @@ export default function ApiManagePlaceholder() {
                   <Input
                     value={cfg.modelId}
                     onChange={(e) => setItems((prev) => ({ ...prev, [name]: { ...prev[name], modelId: e.target.value } }))}
-                    placeholder="例如 doubao-seed-1-6-251015 或 doubao-embedding-large"
+                    placeholder="例如 doubao-seed-1-6-251015"
                   />
                 </div>
               </div>
@@ -156,7 +145,7 @@ export default function ApiManagePlaceholder() {
       </div>
 
       <p className="text-xs text-neutral-500 mt-4">
-        说明：生成式四项默认使用 doubao-seed-1-6-251015；向量处理默认使用 doubao-embedding-large。保存后将写入 .env（不存在会创建），并应用到运行时。
+        说明：生成式三项默认使用 doubao-seed-1-6-251015。保存后将写入 .env（不存在会创建），并应用到运行时。
       </p>
     </div>
   )

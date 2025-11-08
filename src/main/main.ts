@@ -224,10 +224,6 @@ app.whenReady().then(async () => {
     if (n === 'doubao' || n === 'ark') {
       return { apiKey: 'ARK_API_KEY', modelId: 'ARK_MODEL_ID' }
     }
-    // 向量处理（RAG Embedding）统一使用 ARK_API_KEY + ARK_EMBED_MODEL_ID
-    if (n === 'embedding' || n === 'rag_embedding' || n === 'vector' || n === 'embed') {
-      return { apiKey: 'ARK_API_KEY', modelId: 'ARK_EMBED_MODEL_ID' }
-    }
     const upper = (name || '').replace(/[^a-z0-9_]/gi, '').toUpperCase() || 'LLM'
     return { apiKey: `${upper}_API_KEY`, modelId: `${upper}_MODEL_ID` }
   }
@@ -260,7 +256,28 @@ app.whenReady().then(async () => {
     }
   }
 
+  // 移除不再需要的环境变量键（模块精简：移除历史压缩与 RAG）
+  function purgeEnvKeys(keys: string[]) {
+    try {
+      const envPath = path.join(process.cwd(), '.env')
+      if (!fs.existsSync(envPath)) return
+      const content = fs.readFileSync(envPath, 'utf-8')
+      const lines = content.split(/\r?\n/)
+      const keepLines = lines.filter((line) => {
+        const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/)
+        if (!m) return true
+        const k = m[1]
+        return !keys.includes(k)
+      })
+      fs.writeFileSync(envPath, keepLines.join('\n'), 'utf-8')
+    } catch (e) {
+      console.error('Failed to purge .env keys:', e)
+    }
+  }
+
   loadAgents()
+  // 迁移：移除历史压缩与 RAG 相关环境变量
+  purgeEnvKeys(['HISTORY_COMPRESSOR_API_KEY','HISTORY_COMPRESSOR_MODEL_ID','ARK_EMBED_MODEL_ID','RAG_EMBEDDING_API_KEY','RAG_EMBEDDING_MODEL_ID'])
   // 如果 agents 为空且环境变量中已有 Doubao 配置，则以此作为初始条目，便于后续在界面中编辑
   if (!agents.length && (process.env.ARK_API_KEY || process.env.ARK_MODEL_ID)) {
     agents = [

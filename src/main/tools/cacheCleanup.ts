@@ -1,6 +1,5 @@
 import fs from 'fs'
 import path from 'path'
-import { clearRagIndex } from './rag'
 import { getLogsDir } from './agentsMd'
 
 function safeTs() {
@@ -206,14 +205,13 @@ export function cleanupAlgorithmMakingCaches(): { ok: boolean; renamedRaw?: stri
   if (resetFile(algoStatic, defaultStatic)) reset.push(algoStatic)
   if (resetFile(algoDynamic, defaultDynamic)) reset.push(algoDynamic)
 
-  // 3) 清除 RAG 索引缓存
+  // 3) 清除历史 RAG 索引缓存（已移除模块，保留文件级清理）
   try {
     if (fs.existsSync(ragIdx)) {
       fs.unlinkSync(ragIdx)
       removed.push(ragIdx)
     } else {
-      // 调用工具以清除可能的其他索引副本
-      try { clearRagIndex() } catch {}
+      // 模块已移除，无需额外清理
     }
   } catch {}
 

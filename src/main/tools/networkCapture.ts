@@ -41,7 +41,7 @@ function fetchHtml(url: string, headers?: Record<string, string>): Promise<{ ok:
 export async function captureNetwork(url: string, headers?: Record<string, string>): Promise<NetworkCaptureResult> {
   if (!url) return { manifestUrl: null, headers: null, notes: 'no url provided' }
   try {
-    writeMdMessage({ agent: '动态抓包引擎', type: 'start', text: `开始抓包：${url}`, payload: { headerKeys: Object.keys(headers || {}) }, flags: ['DEBUG','KEEP'] })
+  writeMdMessage({ agent: '动态抓包引擎', type: 'start', text: `开始抓包：${url}`, payload: { headerKeys: Object.keys(headers || {}) } })
   } catch {}
   // Prefer Playwright-based capture when available
   try {
@@ -63,7 +63,7 @@ export async function captureNetwork(url: string, headers?: Record<string, strin
         autoPlay: (process.env.PLAYWRIGHT_AUTO_PLAY || '0') === '1',
       }
       let res: NetworkCaptureResult = await mod.captureNetworkWithPlaywright(url, baseOpts)
-      try { writeMdMessage({ agent: '动态抓包引擎', type: 'playwright_attempt', text: '尝试 headless 捕获', payload: { headless: baseOpts.headless, timeoutMs: baseOpts.timeoutMs, autoPlay: baseOpts.autoPlay, channel: baseOpts.channel || null }, flags: ['DEBUG'] }) } catch {}
+  try { writeMdMessage({ agent: '动态抓包引擎', type: 'playwright_attempt', text: '尝试 headless 捕获', payload: { headless: baseOpts.headless, timeoutMs: baseOpts.timeoutMs, autoPlay: baseOpts.autoPlay, channel: baseOpts.channel || null } }) } catch {}
       // Fallback attempt: if no manifest, try headful + autoPlay + local channel if available
       if (!res?.manifestUrl) {
         const fallbackOpts = {
@@ -75,12 +75,12 @@ export async function captureNetwork(url: string, headers?: Record<string, strin
           channel: (channelEnv || 'chrome') as any,
         }
         try {
-          try { writeMdMessage({ agent: '动态抓包引擎', type: 'playwright_attempt', text: '回退 headful + autoPlay', payload: { headless: false, autoPlay: true, channel: fallbackOpts.channel }, flags: ['DEBUG'] }) } catch {}
+  try { writeMdMessage({ agent: '动态抓包引擎', type: 'playwright_attempt', text: '回退 headful + autoPlay', payload: { headless: false, autoPlay: true, channel: fallbackOpts.channel } }) } catch {}
           res = await mod.captureNetworkWithPlaywright(url, fallbackOpts)
         } catch {}
       }
       if (res && (res.manifestUrl || (typeof res.notes === 'string' && res.notes.includes('playwright')))) {
-        try { writeMdMessage({ agent: '动态抓包引擎', type: 'playwright_result', text: res.manifestUrl ? '捕获到清单' : '未捕获清单', payload: { manifestUrl: res.manifestUrl || null, headerKeys: Object.keys(res.headers || {}), notes: res.notes }, flags: ['DEBUG','KEEP'] }) } catch {}
+  try { writeMdMessage({ agent: '动态抓包引擎', type: 'playwright_result', text: res.manifestUrl ? '捕获到清单' : '未捕获清单', payload: { manifestUrl: res.manifestUrl || null, headerKeys: Object.keys(res.headers || {}), notes: res.notes } }) } catch {}
         return { manifestUrl: res.manifestUrl ?? null, headers: res.headers ?? (headers ?? null), notes: res.notes || 'playwright capture' }
       }
     }
@@ -88,11 +88,11 @@ export async function captureNetwork(url: string, headers?: Record<string, strin
   // Fallback: fetch HTML and extract candidates statically
   const page = await fetchHtml(url, headers)
   if (!page.ok) {
-    try { writeMdMessage({ agent: '动态抓包引擎', type: 'fallback_fetch_error', text: '抓取页面失败', payload: { status: page.status || 0, notes: page.notes }, flags: ['DEBUG'] }) } catch {}
+  try { writeMdMessage({ agent: '动态抓包引擎', type: 'fallback_fetch_error', text: '抓取页面失败', payload: { status: page.status || 0, notes: page.notes } }) } catch {}
     return { manifestUrl: null, headers: headers ?? null, notes: page.notes || 'fetch failed' }
   }
-  try { writeMdMessage({ agent: '动态抓包引擎', type: 'fallback_fetch_ok', text: '抓取页面成功', payload: { htmlLength: page.html.length }, flags: ['DEBUG'] }) } catch {}
+  try { writeMdMessage({ agent: '动态抓包引擎', type: 'fallback_fetch_ok', text: '抓取页面成功', payload: { htmlLength: page.html.length } }) } catch {}
   const { candidates } = extractHtmlCandidates(page.html)
-  try { writeMdMessage({ agent: '动态抓包引擎', type: 'fallback_candidates', text: `静态回退候选：${candidates.length} 个`, payload: { sample: candidates.slice(0, 6) }, flags: ['DEBUG','KEEP'] }) } catch {}
+  try { writeMdMessage({ agent: '动态抓包引擎', type: 'fallback_candidates', text: `静态回退候选：${candidates.length} 个`, payload: { sample: candidates.slice(0, 6) } }) } catch {}
   return { manifestUrl: candidates[0] || null, headers: headers ?? null, notes: `fallback network capture via HTML; candidates=${candidates.length}` }
 }

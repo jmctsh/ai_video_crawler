@@ -35,7 +35,7 @@ export async function captureNetworkWithPlaywright(url: string, options?: Playwr
     const mod: any = await import('playwright')
     chromium = mod.chromium
   } catch {
-    try { writeMdMessage({ agent: '动态抓包引擎', type: 'playwright_unavailable', text: 'Playwright 未安装', flags: ['DEBUG'] }) } catch {}
+try { writeMdMessage({ agent: '动态抓包引擎', type: 'playwright_unavailable', text: 'Playwright 未安装' }) } catch {}
     return { manifestUrl: null, headers: options?.headers ?? null, notes: 'playwright not installed' }
   }
 
@@ -69,7 +69,7 @@ export async function captureNetworkWithPlaywright(url: string, options?: Playwr
 
   const browser = await chromium.launch(launchOpts)
   try {
-    try { writeMdMessage({ agent: '动态抓包引擎', type: 'playwright_launch', text: '浏览器启动', payload: { headless: launchOpts.headless, channel: launchOpts.channel || null, proxy: !!launchOpts.proxy }, flags: ['DEBUG'] }) } catch {}
+try { writeMdMessage({ agent: '动态抓包引擎', type: 'playwright_launch', text: '浏览器启动', payload: { headless: launchOpts.headless, channel: launchOpts.channel || null, proxy: !!launchOpts.proxy } }) } catch {}
     const context = await browser.newContext({
       userAgent: options?.userAgent,
       extraHTTPHeaders: options?.headers,
@@ -188,10 +188,10 @@ export async function captureNetworkWithPlaywright(url: string, options?: Playwr
     const manifestUrl = list[0] || null
     const headers = Object.keys(criticalHeaders).length ? criticalHeaders : (options?.headers ?? null)
     notes.push(`candidates=${list.length}`)
-    try { writeMdMessage({ agent: '动态抓包引擎', type: 'playwright_candidates', text: `候选 ${list.length} 个`, payload: { sample: list.slice(0, 6), headerKeys: Object.keys(headers || {}) }, flags: ['DEBUG','KEEP'] }) } catch {}
+try { writeMdMessage({ agent: '动态抓包引擎', type: 'playwright_candidates', text: `候选 ${list.length} 个`, payload: { sample: list.slice(0, 6), headerKeys: Object.keys(headers || {}) } }) } catch {}
     return { manifestUrl, headers, notes: `playwright capture; ${notes.join(' | ')}` }
   } catch (e: any) {
-    try { writeMdMessage({ agent: '动态抓包引擎', type: 'playwright_error', text: '抓包异常', payload: { message: e?.message || String(e) }, flags: ['DEBUG'] }) } catch {}
+try { writeMdMessage({ agent: '动态抓包引擎', type: 'playwright_error', text: '抓包异常', payload: { message: e?.message || String(e) } }) } catch {}
     return { manifestUrl: null, headers: options?.headers ?? null, notes: e?.message || 'playwright capture error' }
   } finally {
     try { await browser.close() } catch {}

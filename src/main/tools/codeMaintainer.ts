@@ -242,7 +242,7 @@ export function writeAlgorithmCode(args: { title?: string; code: string; languag
   const file = getAlgorithmMdPath()
   const block = makeCodeBlock(args.title, args.code, args.language, args.meta)
   fs.appendFileSync(file, block, 'utf-8')
-  writeMdMessage({ agent: '代码维护员', type: 'write_code', text: `写入算法代码段(aggregate)：${(args.title || '').slice(0, 40)}`, payload: { language: args.language || 'ts' }, flags: ['KEEP'] })
+  writeMdMessage({ agent: '代码维护员', type: 'write_code', text: `写入算法代码段(aggregate)：${(args.title || '').slice(0, 40)}`, payload: { language: args.language || 'ts' } })
   return { ok: true }
 }
 
@@ -250,7 +250,7 @@ export function writeAlgorithmCodeTo(target: 'static' | 'dynamic', args: { title
   const file = target === 'static' ? getAlgorithmStaticPath() : getAlgorithmDynamicPath()
   const block = makeCodeBlock(args.title, args.code, args.language, args.meta)
   fs.appendFileSync(file, block, 'utf-8')
-  writeMdMessage({ agent: '代码维护员', type: `write_code_${target}`, text: `写入${target === 'static' ? '静态' : '动态'}算法代码段：${(args.title || '').slice(0, 40)}`, payload: { language: args.language || 'ts' }, flags: ['KEEP'] })
+  writeMdMessage({ agent: '代码维护员', type: `write_code_${target}`, text: `写入${target === 'static' ? '静态' : '动态'}算法代码段：${(args.title || '').slice(0, 40)}`, payload: { language: args.language || 'ts' } })
   return { ok: true }
 }
 
@@ -263,7 +263,7 @@ export function resetAlgorithmMd(reason?: string): { ok: boolean } {
     fs.appendFileSync(archive, header + content, 'utf-8')
   }
   fs.writeFileSync(file, `# Current Algorithm Code (Aggregate)\n\n`, 'utf-8')
-  writeMdMessage({ agent: '代码维护员', type: 'reset_code_md', text: '重置聚合算法代码MD，旧内容已归档', payload: { reason }, flags: ['DECISION', 'KEEP'] })
+  writeMdMessage({ agent: '代码维护员', type: 'reset_code_md', text: '重置聚合算法代码MD，旧内容已归档', payload: { reason } })
   return { ok: true }
 }
 
@@ -366,7 +366,7 @@ export function resetAlgorithmMdTarget(target: 'static' | 'dynamic', reason?: st
     ].join('\n')
     fs.writeFileSync(file, content, 'utf-8')
   }
-  writeMdMessage({ agent: '代码维护员', type: `reset_code_md_${target}`, text: `重置${target === 'static' ? '静态' : '动态'}算法代码MD，旧内容已归档`, payload: { reason }, flags: ['DECISION', 'KEEP'] })
+  writeMdMessage({ agent: '代码维护员', type: `reset_code_md_${target}`, text: `重置${target === 'static' ? '静态' : '动态'}算法代码MD，旧内容已归档`, payload: { reason } })
   return { ok: true }
 }
 
@@ -396,7 +396,7 @@ export function finalizeAlgorithmIntoStorePick(args?: { pick?: 'static' | 'dynam
     targetName = existing.length ? existing[Math.floor(Math.random() * existing.length)].name : `algo_${Math.random().toString(36).slice(2, 8)}`
   }
   writeAlgorithmFile(targetName, code, 'js')
-  writeMdMessage({ agent: '代码维护员', type: 'finalize', text: `提交最终${pick === 'static' ? '静态' : '动态'}算法代码到主程序：${targetName}`, payload: { name: targetName, pick }, flags: ['FINAL', 'CRITICAL', 'KEEP'] })
+  writeMdMessage({ agent: '代码维护员', type: 'finalize', text: `提交最终${pick === 'static' ? '静态' : '动态'}算法代码到主程序：${targetName}`, payload: { name: targetName, pick } })
   return { ok: true, targetName, pick }
 }
 
@@ -416,7 +416,7 @@ export function finalizeAlgorithmIntoStore(): { ok: boolean; targetName: string 
       const existing = listAlgoFiles()
       const targetName = existing.length ? existing[Math.floor(Math.random() * existing.length)].name : `algo_${Math.random().toString(36).slice(2, 8)}`
       writeAlgorithmFile(targetName, code, 'js')
-      writeMdMessage({ agent: '代码维护员', type: 'finalize_fallback', text: `提交聚合算法代码到主程序：${targetName}`, payload: { name: targetName }, flags: ['FINAL', 'KEEP'] })
+  writeMdMessage({ agent: '代码维护员', type: 'finalize_fallback', text: `提交聚合算法代码到主程序：${targetName}`, payload: { name: targetName } })
       return { ok: true, targetName }
     }
   }

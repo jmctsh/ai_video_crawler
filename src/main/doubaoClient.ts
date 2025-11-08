@@ -122,7 +122,7 @@ export function createDoubaoClientFromEnv() {
 }
 
 // Create per-agent Doubao client using dedicated env keys
-// Agent name mapping: STATIC_PARSER / NETWORK_CAPTURE / HISTORY_COMPRESSOR
+// Agent name mapping: STATIC_PARSER / NETWORK_CAPTURE
 function envKeysForAgent(agentName: string): { apiKeyKey: string; modelIdKey: string } {
   const n = (agentName || '').trim().toUpperCase()
   if (n === 'ARK' || n === 'DOUBAO' || n === 'GLOBAL') {
@@ -132,7 +132,6 @@ function envKeysForAgent(agentName: string): { apiKeyKey: string; modelIdKey: st
   const map: Record<string, { apiKeyKey: string; modelIdKey: string }> = {
     'STATIC_PARSER': { apiKeyKey: 'STATIC_PARSER_API_KEY', modelIdKey: 'STATIC_PARSER_MODEL_ID' },
     'NETWORK_CAPTURE': { apiKeyKey: 'NETWORK_CAPTURE_API_KEY', modelIdKey: 'NETWORK_CAPTURE_MODEL_ID' },
-    'HISTORY_COMPRESSOR': { apiKeyKey: 'HISTORY_COMPRESSOR_API_KEY', modelIdKey: 'HISTORY_COMPRESSOR_MODEL_ID' },
   }
   return map[n] || { apiKeyKey: `${n}_API_KEY`, modelIdKey: `${n}_MODEL_ID` }
 }

@@ -56,7 +56,7 @@ export async function startCoordinator(input: CoordinatorInput): Promise<{ runId
   const run: CoordinatorRun = { id, status: 'running', startedAt: now, updatedAt: now, input }
   runs.set(id, run)
 
-  writeMdMessage({ agent: '总协调员', type: 'start', text: '开始抓取', flags: ['DECISION', 'KEEP'] })
+  writeMdMessage({ agent: '总协调员', type: 'start', text: '开始抓取' })
 
   // 将用户提交的初始信息改为单独存放到 debug，不再写入 agents 日志
   try {
@@ -102,7 +102,6 @@ export async function startCoordinator(input: CoordinatorInput): Promise<{ runId
         type: 'candidates',
         text: `静态解析发现候选清单 ${staticCandidates.length} 个`,
         payload: { candidates: staticCandidates },
-        flags: staticCandidates.length ? ['CANDIDATE'] : [],
       })
     }
 
@@ -112,12 +111,11 @@ export async function startCoordinator(input: CoordinatorInput): Promise<{ runId
       agent: '动态抓包员',
       type: 'capture',
       text: '动态抓包暂未实现（占位）',
-      flags: [],
     })
 
     const manifestUrl = dynamicManifest || staticCandidates[0]
     if (!manifestUrl) {
-      writeMdMessage({ agent: '异常诊断员', type: 'variants_empty', text: '未找到清单', flags: ['ERROR', 'CRITICAL'] })
+    writeMdMessage({ agent: '异常诊断员', type: 'variants_empty', text: '未找到清单' })
       run.status = 'error'
       run.error = '未找到清单 URL'
       run.updatedAt = Date.now()
@@ -129,11 +127,10 @@ export async function startCoordinator(input: CoordinatorInput): Promise<{ runId
       type: 'select_variant',
       text: '解析与选择最高分辨率暂未实现（占位）',
       payload: { manifestUrl },
-      flags: ['DECISION'],
     })
 
     // 下载与验收（占位）
-    writeMdMessage({ agent: '下载与验收员', type: 'download', text: '下载管线未接入（占位）', flags: [] })
+  writeMdMessage({ agent: '下载与验收员', type: 'download', text: '下载管线未接入（占位）' })
 
     run.result = { manifestUrl, notes: '管线待接入，已完成协调与记录占位' }
     run.status = 'done'
@@ -144,13 +141,12 @@ export async function startCoordinator(input: CoordinatorInput): Promise<{ runId
       type: 'final',
       text: `完成占位流程，清单：${manifestUrl}`,
       payload: { runId: id, manifestUrl },
-      flags: ['FINAL', 'CRITICAL', 'KEEP'],
     })
   } catch (e: any) {
     run.status = 'error'
     run.error = e?.message || String(e)
     run.updatedAt = Date.now()
-    writeMdMessage({ agent: '总协调员', type: 'error', text: String(run.error), flags: ['ERROR', 'CRITICAL'] })
+    writeMdMessage({ agent: '总协调员', type: 'error', text: String(run.error) })
   }
 
   return { runId: id }

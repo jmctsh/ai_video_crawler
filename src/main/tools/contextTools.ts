@@ -1,5 +1,5 @@
 import fs from 'fs'
-import { getAgentsMdPath, writeMdMessage } from './agentsMd'
+import { getAgentsMdPath } from './agentsMd'
 
 export interface MdMessageRecord {
   agent: string
@@ -7,7 +7,6 @@ export interface MdMessageRecord {
   type: string
   text?: string
   payload?: any
-  flags?: string[]
   parentMsgId?: string | null
   msgId: string
 }
@@ -26,7 +25,7 @@ function parseJsonBlocks(content: string): MdMessageRecord[] {
   return records
 }
 
-export function readMdMessages(filter?: { flags?: string[]; agent?: string[]; type?: string[]; sinceMsgId?: string }) {
+export function readMdMessages(filter?: { agent?: string[]; type?: string[]; sinceMsgId?: string }) {
   const file = getAgentsMdPath()
   const content = fs.readFileSync(file, 'utf-8')
   let records = parseJsonBlocks(content)
@@ -36,13 +35,7 @@ export function readMdMessages(filter?: { flags?: string[]; agent?: string[]; ty
   }
   if (filter?.agent?.length) records = records.filter(r => filter!.agent!.includes(r.agent))
   if (filter?.type?.length) records = records.filter(r => filter!.type!.includes(r.type))
-  if (filter?.flags?.length) records = records.filter(r => (r.flags || []).some(f => filter!.flags!.includes(f)))
   return records
-}
-
-export function markCritical(msgId: string, flags: string[]) {
-  writeMdMessage({ agent: '对话记录员', type: 'mark', text: `标记 ${msgId} → ${flags.join(',')}`, payload: { msgId, flags }, flags })
-  return { ok: true }
 }
 
 export function measureMdFile() {
@@ -57,25 +50,18 @@ export function estimateTokens(messages: MdMessageRecord[]): { tokens: number } 
   return { tokens: Math.ceil(totalChars / 4) }
 }
 
-export function cropHistory(messages: MdMessageRecord[], windowSize: number, keepFlags: string[]) {
-  const critical = new Set<string>(keepFlags)
-  const kept: MdMessageRecord[] = []
-  const nonCritical: MdMessageRecord[] = []
-  for (const m of messages) {
-    if ((m.flags || []).some(f => critical.has(f))) kept.push(m)
-    else nonCritical.push(m)
+// 新裁剪策略：固定仅保留最近 3 条由 LLM 提交的日志
+export function cropHistory(messages: MdMessageRecord[], _windowSize: number) {
+  const isLLM = (agent: string) => agent.includes('(LLM)') || agent.includes('生成式AI')
+  const llmMessages = messages.filter(m => isLLM(m.agent))
+  const tail = llmMessages.slice(-3)
+  const keepIds = new Set<string>(tail.map(m => m.msgId))
+  const final = messages.filter(m => keepIds.has(m.msgId))
+  const removed = messages.filter(m => !keepIds.has(m.msgId))
+  return {
+    keptCount: final.length,
+    removedCount: removed.length,
+    windowSize: 3,
+    plan: { keepIds: final.map(m => m.msgId), removeIds: removed.map(m => m.msgId) }
   }
-  const tail = nonCritical.slice(-windowSize)
-  const final = [...kept, ...tail]
-  const removed = messages.filter(m => !final.includes(m))
-  return { keptCount: final.length, removedCount: removed.length, windowSize, keepFlags, plan: { keepIds: final.map(m => m.msgId), removeIds: removed.map(m => m.msgId) } }
-}
-
-export function compressHistory(messages: MdMessageRecord[], budgetTokens: number, keepFlags: string[]) {
-  const critical = new Set<string>(keepFlags)
-  const toCompress = messages.filter(m => !(m.flags || []).some(f => critical.has(f)))
-  const summary = toCompress.map(m => `${m.agent}:${m.type}`).join(' | ').slice(0, Math.max(80, budgetTokens))
-  const entry = { agent: '历史压缩员', type: 'summary', text: `压缩摘要：${summary}`, payload: { budgetTokens, replacedCount: toCompress.length }, flags: ['COMPRESS_LOG'] }
-  const { msgId } = writeMdMessage(entry)
-  return { msgId, replacedCount: toCompress.length }
 }

@@ -102,27 +102,27 @@ export async function downloadAndMerge(args: { manifestUrl?: string; headers?: R
 
   // HLS/DASH pipeline
   try {
-    writeMdMessage({ agent: '下载与验收员', type: 'start', text: `开始下载：${url}`, flags: ['KEEP'] })
+  writeMdMessage({ agent: '下载与验收员', type: 'start', text: `开始下载：${url}` })
     const planRes = await buildDownloadPlan({ url, headers: args?.headers })
     if (!planRes.ok || !planRes.plan) {
       // 若直接清单失败，回退尝试执行已存储算法（最小可用）以获得清单或直链
       const algOut = await runStoredAlgorithm(url, args?.headers)
       if (algOut?.manifestUrl) {
-        writeMdMessage({ agent: '下载与验收员', type: 'plan_retry_with_algorithm', text: '通过算法获得清单', payload: algOut, flags: ['KEEP'] })
+  writeMdMessage({ agent: '下载与验收员', type: 'plan_retry_with_algorithm', text: '通过算法获得清单', payload: algOut })
         const retry = await buildDownloadPlan({ url: algOut.manifestUrl, headers: args?.headers })
         if (!retry.ok || !retry.plan) {
-          writeMdMessage({ agent: '下载与验收员', type: 'plan_failed', text: retry.notes || '算法清单也无法生成下载计划', flags: ['ERROR'] })
+  writeMdMessage({ agent: '下载与验收员', type: 'plan_failed', text: retry.notes || '算法清单也无法生成下载计划' })
           return { filePath: null as string | null, ok: false, notes: retry.notes || 'plan failed after algorithm' }
         }
         Object.assign(planRes, retry)
       } else if (algOut?.directUrl) {
-        writeMdMessage({ agent: '下载与验收员', type: 'plan_retry_with_algorithm', text: '通过算法获得直链', payload: algOut, flags: ['KEEP'] })
+  writeMdMessage({ agent: '下载与验收员', type: 'plan_retry_with_algorithm', text: '通过算法获得直链', payload: algOut })
         const { base, ext } = pickFileNameFromUrl(algOut.directUrl)
         const dest = path.join(getDownloadDir(), base || `video_${Date.now()}${ext || '.mp4'}`)
         const { ok, size, notes } = await downloadFile(algOut.directUrl, dest, args?.headers)
         return { filePath: dest, ok, notes: ok ? `downloaded ${size} bytes` : notes }
       } else {
-        writeMdMessage({ agent: '下载与验收员', type: 'plan_failed', text: planRes.notes || '无法生成下载计划', flags: ['ERROR'] })
+  writeMdMessage({ agent: '下载与验收员', type: 'plan_failed', text: planRes.notes || '无法生成下载计划' })
         return { filePath: null as string | null, ok: false, notes: planRes.notes || 'plan failed' }
       }
     }
@@ -161,7 +161,7 @@ export async function downloadAndMerge(args: { manifestUrl?: string; headers?: R
         }
 
         if (plan.initUrl) {
-          writeMdMessage({ agent: '下载与验收员', type: 'init', text: '下载初始化段', payload: { initUrl: plan.initUrl }, flags: ['KEEP'] })
+  writeMdMessage({ agent: '下载与验收员', type: 'init', text: '下载初始化段', payload: { initUrl: plan.initUrl } })
           const okInit = await appendUrl(plan.initUrl)
           if (!okInit) return { filePath: null as string | null, ok: false, notes: 'init download failed' }
         }
@@ -169,10 +169,10 @@ export async function downloadAndMerge(args: { manifestUrl?: string; headers?: R
         for (const seg of plan.segments) {
           const okSeg = await appendUrl(seg)
           done += 1
-          writeMdMessage({ agent: '下载与验收员', type: 'progress', text: `已写入分片 ${done}/${plan.segments.length}`, flags: ['KEEP'] })
+  writeMdMessage({ agent: '下载与验收员', type: 'progress', text: `已写入分片 ${done}/${plan.segments.length}` })
           if (!okSeg) return { filePath: outPath, ok: false, notes: `segment failed at ${done}` }
         }
-        writeMdMessage({ agent: '下载与验收员', type: 'merge', text: 'fMP4 直接合并完成', payload: { filePath: outPath }, flags: ['KEEP'] })
+  writeMdMessage({ agent: '下载与验收员', type: 'merge', text: 'fMP4 直接合并完成', payload: { filePath: outPath } })
         return { filePath: outPath, ok: true, notes: 'hls fmp4 merged' }
       }
 
@@ -210,7 +210,7 @@ export async function downloadAndMerge(args: { manifestUrl?: string; headers?: R
         const dest = path.join(tmpDir, name)
         const ok = await downloadSeg(seg, dest)
         idx += 1
-        writeMdMessage({ agent: '下载与验收员', type: 'progress', text: `分片下载 ${idx}/${plan.segments!.length}`, flags: ['KEEP'] })
+  writeMdMessage({ agent: '下载与验收员', type: 'progress', text: `分片下载 ${idx}/${plan.segments!.length}` })
         if (!ok) return { filePath: null as string | null, ok: false, notes: `segment download failed at ${idx}` }
         segPaths.push(dest)
       }
@@ -223,7 +223,7 @@ export async function downloadAndMerge(args: { manifestUrl?: string; headers?: R
         const out = path.join(outDir, `video_${Date.now()}.mp4`)
         const run = spawnSync(ffmpegPath as string, ['-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', out], { stdio: 'ignore' })
         if (run.status === 0 && fs.existsSync(out)) {
-          writeMdMessage({ agent: '下载与验收员', type: 'merge', text: 'ffmpeg concat 合并完成', payload: { filePath: out }, flags: ['KEEP'] })
+  writeMdMessage({ agent: '下载与验收员', type: 'merge', text: 'ffmpeg concat 合并完成', payload: { filePath: out } })
           return { filePath: out, ok: true, notes: 'hls ts merged via ffmpeg' }
         }
         return { filePath: null as string | null, ok: false, notes: 'ffmpeg concat failed' }
@@ -234,7 +234,7 @@ export async function downloadAndMerge(args: { manifestUrl?: string; headers?: R
           const data = fs.readFileSync(p)
           fs.appendFileSync(outTs, data)
         }
-        writeMdMessage({ agent: '下载与验收员', type: 'merge', text: '无 ffmpeg：输出 TS 拼接文件', payload: { filePath: outTs }, flags: ['KEEP'] })
+  writeMdMessage({ agent: '下载与验收员', type: 'merge', text: '无 ffmpeg：输出 TS 拼接文件', payload: { filePath: outTs } })
         return { filePath: outTs, ok: true, notes: 'hls ts concatenated (no ffmpeg)' }
       }
     }
@@ -276,10 +276,10 @@ export async function downloadAndMerge(args: { manifestUrl?: string; headers?: R
       for (const seg of plan.segments!) {
         const okSeg = await appendUrl(seg)
         done += 1
-        writeMdMessage({ agent: '下载与验收员', type: 'progress', text: `DASH 分片 ${done}/${plan.segments!.length}`, flags: ['KEEP'] })
+  writeMdMessage({ agent: '下载与验收员', type: 'progress', text: `DASH 分片 ${done}/${plan.segments!.length}` })
         if (!okSeg) return { filePath: outPath, ok: false, notes: `dash segment failed at ${done}` }
       }
-      writeMdMessage({ agent: '下载与验收员', type: 'merge', text: 'DASH 直接合并完成', payload: { filePath: outPath }, flags: ['KEEP'] })
+  writeMdMessage({ agent: '下载与验收员', type: 'merge', text: 'DASH 直接合并完成', payload: { filePath: outPath } })
       return { filePath: outPath, ok: true, notes: 'dash merged' }
     }
 

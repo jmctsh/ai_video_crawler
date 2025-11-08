@@ -20,8 +20,7 @@ export function extractHtmlCandidates(html: string): { candidates: string[]; pla
       agent: '静态解析引擎',
       type: 'scan',
       text: `HTML 候选提取完成：${candidates.length} 个`,
-      payload: { sample: candidates.slice(0, 6) },
-      flags: ['DEBUG','KEEP']
+      payload: { sample: candidates.slice(0, 6) }
     })
   } catch {}
   return { candidates, playerParams }

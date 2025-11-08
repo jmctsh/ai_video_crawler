@@ -6,7 +6,6 @@ export interface MdEntry {
   type: string
   text: string
   payload?: any
-  flags?: string[]
   parentMsgId?: string
 }
 
@@ -59,20 +58,18 @@ export function getCodeMdPath(): string {
 
 function toBlock(entry: MdEntry, msgId: string): string {
   const ts = new Date().toISOString()
-  const flagsLine = (entry.flags && entry.flags.length) ? `!${entry.flags.join(' !')}` : ''
   const json = {
     agent: entry.agent,
     ts,
     type: entry.type,
     text: entry.text,
     payload: entry.payload ?? null,
-    flags: entry.flags ?? [],
     parentMsgId: entry.parentMsgId ?? null,
     msgId,
   }
   return [
     `### [msg:${ts}] ${entry.agent} → ${entry.type}`,
-    flagsLine,
+    // 不再输出标记行
     entry.text || '',
     '',
     '```json',
@@ -89,7 +86,6 @@ interface MdMessageRecord {
   type: string
   text?: string
   payload?: any
-  flags?: string[]
   parentMsgId?: string | null
   msgId: string
 }
@@ -109,10 +105,9 @@ function parseJsonBlocks(content: string): MdMessageRecord[] {
 }
 
 function toBlockFromRecord(rec: MdMessageRecord): string {
-  const flagsLine = (rec.flags && rec.flags.length) ? `!${rec.flags.join(' !')}` : ''
   return [
     `### [msg:${rec.ts}] ${rec.agent} → ${rec.type}`,
-    flagsLine,
+    // 不再输出标记行
     rec.text || '',
     '',
     '```json',
@@ -122,15 +117,12 @@ function toBlockFromRecord(rec: MdMessageRecord): string {
   ].join('\n')
 }
 
-function cropHistory(records: MdMessageRecord[], windowSize: number, keepFlags: string[]) {
-  const critical = new Set<string>(keepFlags)
-  const nonCritical: MdMessageRecord[] = []
-  const isCritical = (m: MdMessageRecord) => (m.flags || []).some(f => critical.has(f))
-  for (const m of records) {
-    if (!isCritical(m)) nonCritical.push(m)
-  }
-  const tail = nonCritical.slice(-windowSize)
-  const keepIds = new Set<string>([...records.filter(isCritical), ...tail].map(m => m.msgId))
+// 新裁剪策略：仅保留最近 3 条“LLM 提交的”日志
+function cropHistoryKeepRecentLLM(records: MdMessageRecord[]) {
+  const isLLM = (agent: string) => agent.includes('(LLM)') || agent.includes('生成式AI')
+  const llmRecords = records.filter(r => isLLM(r.agent))
+  const tail = llmRecords.slice(-3)
+  const keepIds = new Set<string>(tail.map(m => m.msgId))
   const final = records.filter(m => keepIds.has(m.msgId))
   const removed = records.filter(m => !keepIds.has(m.msgId))
   return { keptCount: final.length, removedCount: removed.length, final }
@@ -140,9 +132,8 @@ function autoPrunePromptMd() {
   const file = getPromptMdPath()
   const content = fs.readFileSync(file, 'utf-8')
   const records = parseJsonBlocks(content)
-  const DEFAULT_WINDOW = Number(process.env.AGENTS_PROMPT_WINDOW || 30)
-  const KEEP_FLAGS = (process.env.AGENTS_PROMPT_KEEP_FLAGS || 'CRITICAL,DECISION,KEEP,ERROR').split(',').map(s => s.trim()).filter(Boolean)
-  const { final, removedCount } = cropHistory(records, DEFAULT_WINDOW, KEEP_FLAGS)
+  // 固定策略：仅保留最近 3 条 LLM 提交的日志
+  const { final, removedCount } = cropHistoryKeepRecentLLM(records)
   if (removedCount > 0) {
     const header = `# Agents Prompt Log\n\n`
     const rebuilt = header + final.map(toBlockFromRecord).join('')
@@ -155,13 +146,8 @@ export function writePromptMessage(entry: MdEntry): { msgId: string } {
   const msgId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   const block = toBlock(entry, msgId)
   fs.appendFileSync(file, block, 'utf-8')
-  // 自动触发滑动窗口裁剪（保留关键标记）
+  // 自动触发裁剪：固定仅保留最近 3 条 LLM 提交日志
   try { autoPrunePromptMd() } catch {}
-  // 自动触发历史压缩员（LLM），在超阈值时执行压缩
-  try {
-    // 动态导入以避免循环依赖
-    import('./historyCompressor').then(mod => mod.autoCompressPromptMd().catch(() => {})).catch(() => {})
-  } catch {}
   return { msgId }
 }
 

@@ -1,20 +1,20 @@
-# AI 视频爬虫多智能体架构蓝图（三份对话MD与代码维护）
+# AI 视频爬虫多智能体架构蓝图（裁剪优先，无压缩与 RAG）
 
-> 目标：仅抓取“主视频”，默认选择最高分辨率；不做文本抓取。采用共享一篇 Markdown（`agents.md`）作为智能体间通信与状态轨迹的唯一事实来源（Single Source of Truth）。本蓝图定义角色、消息规范、上下文管理策略（压缩/裁剪保留关键标记）、工具接口与实施计划。
+> 目标：仅抓取“主视频”，默认选择最高分辨率；不做文本抓取。采用共享一篇 Markdown（`agents.md`）作为智能体间通信与状态轨迹的唯一事实来源（Single Source of Truth）。本蓝图定义角色、消息规范、上下文管理策略（裁剪保留关键信息）、工具接口与实施计划。
 
 ## 1. 架构总览
 - 核心理念：
-  - 能力工具化（解析、抓包、清单处理、下载合并、历史压缩/裁剪等），LLM 负责编排与出补丁。
+  - 能力工具化（解析、抓包、清单处理、下载合并、裁剪等），LLM 负责编排与出补丁。
   - 对话文件分为三份（含两篇算法代码）：
     1) 提示MD（`agents.md`）：注入到 LLM 的共享上下文，可执行裁剪/压缩；保留关键标记。
     2) 原始日志MD（`agents_raw.md`）：完整保留原始对话，不做裁剪/压缩，供人类审阅。
     3) 算法代码MD（静态/动态）：`algorithm_static.md` 与 `algorithm_dynamic.md`，分别用于静态解析路径与动态抓包路径生成的算法代码；兼容保留聚合版 `algorithm.md`（回退/汇总）。
-- 上下文过长时，优先裁剪（滑动窗口+保留关键标记），再压缩；压缩严格保留“关键标记”内容。
+- 上下文过长时，仅裁剪（滑动窗口+保留关键消息）；不再执行压缩。
 - 主要流程：
   1) 入口：用户提供页面源代码或网址。
   2) 路径选择与交错：协调员可根据上下文与已提交/正在编写的算法代码，自主决定先静态或先动态，并允许在同一流程中交错调用两类工具。交错时需在 `agents.md` 记录依据与切换原因，并将算法代码分别写入 `algorithm_static.md` 或 `algorithm_dynamic.md`。
   3) 人类验收流程：合并“清单解析 + 变体优选 + 下载合并 + 人类确认”，确保最终产出为正确的主视频文件。
-  4) 记录与上下文管理：记录员写入 `agents.md` 的标准消息；裁剪员/压缩员按策略维护上下文体积。
+  4) 记录与上下文管理：记录员写入 `agents.md` 的标准消息；裁剪员按策略维护上下文体积。
 
 ## 2. 智能体与职责（LLM / 本地算法 / 人类工具分工）
 - 总协调员（Coordinator）
@@ -45,11 +45,7 @@
   - 实现类型：本地工具（写文件/锁/关键标记启发式）；可选 LLM 辅助关键性判定。
   - 工具：`writeMdMessage(entry)`、`markCritical(entryId, tags)`。
   - 输出：标准化消息块（含 JSON 负载）、关键标记。
-- 历史压缩员（压缩员）
-  - 职责：当上下文超预算时，对非关键内容进行语义压缩，生成保留关键标记的摘要。
-  - 实现类型：LLM 优先（语义压缩/重写）；本地摘要作为回退或前置去噪。
-  - 工具：`compressHistory(messages, budget, keepFlags)`。
-  - 输出：压缩摘要块、替换计划（保留关键标记原文）。
+ 
 - 上下文裁剪员（裁剪员）
   - 职责：采用滑动窗口策略裁剪历史；绝不裁剪带关键标记的消息；对冗余日志进行窗口化保留。
   - 实现类型：本地算法（窗口/索引/标记保留）。
@@ -67,7 +63,6 @@
 - 消息块格式示例：
 ```
 ### [msg:2025-10-27T12:03:15Z] 清单解析员 → 选定最高分辨率
-!CRITICAL !DECISION
 解析到 6 个变体，最高分辨率为 1920x1080，码率 8Mbps。
 
 ```json
@@ -89,33 +84,25 @@
     "selected": {"id": "v5", "res": "1920x1080", "br": 8.0},
     "policy": "prefer_max_resolution_then_bitrate"
   },
-  "flags": ["CRITICAL", "DECISION", "KEEP"],
   "status": "ok"
 }
 ```
 ```
-- 关键标记语法：
-  - 行内标记：以 `!CRITICAL`/`!DECISION`/`!ERROR`/`!FINAL`/`!CANDIDATE`/`!KEEP` 开头的标记词，空格分隔。
-  - JSON 标记：`"flags": ["CRITICAL", "KEEP", ...]`。
-  - 保留规则：裁剪/压缩必须保留所有带 `CRITICAL` 或 `KEEP` 的消息（原文或最小可读片段）。
+- 关键消息保留：裁剪保留最近里程碑与决策消息；错误与最终结论必须保留原文。
 - 写入策略：
-  - 使用 `writeMdMessage()` 将消息同时写入提示MD与原始日志MD（双写）；提示MD参与裁剪/压缩，原始日志MD完整保留。
+  - 使用 `writeMdMessage()` 将消息同时写入提示MD与原始日志MD（双写）；提示MD参与裁剪，原始日志MD完整保留。
   - 每条消息必须含 `msgId`（可用 `ts + rand`）用于引用与标记。
 
-## 4. 上下文管理策略（压缩与裁剪）
+## 4. 上下文管理策略（仅裁剪）
 - 全局预算：
   - `TOKEN_BUDGET`（LLM 上下文预算，默认 8k~16k tokens），`FILE_BUDGET`（`agents.md` 文件大小）。
 - 触发器：
-  - 调用 LLM 前检测 `est_tokens(messages) > TOKEN_BUDGET` → 触发裁剪员；仍超出 → 触发压缩员。
-  - 文件大小超过 `FILE_BUDGET` → 异步压缩历史非关键片段。
+  - 调用 LLM 前检测 `est_tokens(messages) > TOKEN_BUDGET` → 触发裁剪员。
+  - 文件大小超过 `FILE_BUDGET` → 异步裁剪历史非关键片段。
 - 裁剪（优先）：
   - 滑动窗口：保留最近 `N` 条普通消息 + 所有关键标记消息（`CRITICAL/KEEP/DECISION/FINAL/ERROR`）。
   - 边界策略：按“步骤”而不是“字符数”裁剪；保留每个阶段的里程碑消息。
-- 压缩（次选）：
-  - 压缩员生成摘要块：主题、关键结论、关键来源引用（`msgId` 链接）。
-  - 替换规则：仅替换无关键标记的长消息；保留原文索引以便回溯。
-- RAG 辅助（可选）：
-  - 将 `agents.md` 建立轻量索引；LLM 问答时先检索再填充上下文；检索优先关键标记。
+
 
 ## 5. 工具接口（主进程/可调用）
 - `writeMdMessage(entry)`
@@ -143,11 +130,8 @@
 - `markCritical(msgId, flags)`
   - 入参：`{msgId, flags:["CRITICAL","KEEP",...]}`
   - 出参：更新结果。
-- `compressHistory(messages, budget, keepFlags)`
-  - 入参：原始消息、token 预算、保留标记集。
-  - 出参：摘要消息块（含引用）、替换建议。
-- `cropHistory(messages, windowSize, keepFlags)`
-  - 入参：窗口大小（条数或时间）、保留标记集。
+- `cropHistory(messages, windowSize)`
+  - 入参：窗口大小（条数或时间）。
   - 出参：裁剪后的消息列表、移除清单。
 - `extractHtmlCandidates(html)` / `findManifestLinks(html)`
   - 输出：候选清单 URL、播放器参数、可信度评分。
@@ -158,7 +142,7 @@
 - `downloadAndMerge(manifest, headers)` / `probeMedia(file)`
   - 输出：最终文件、校验结果、失败轨迹（由“人类验收流程”内部调用，不再直接暴露为独立对外步骤）。
 - `detectInputLimit(error)`
-  - 输出：是否为输入超限、建议触发裁剪/压缩或改用检索。
+  - 输出：是否为输入超限、建议触发裁剪。
  - `runHumanAcceptanceFlow(input)` / `runHumanAcceptanceFlowWithStore(input)`
   - 入参：`{algorithmName|algorithmMdPath, pageUrl, headers?}` 或 `{algorithmName, pageUrl, headers?}`（使用存储算法）。
   - 出参：`{filePath, selectedVariant?, notes?, ok}`；内部可能触发 `requestHumanValidation(...)` 并将决策写入 `agents.md`。
@@ -166,7 +150,7 @@
 ## 6. 决策工作流（伪代码）
 ```
 Coordinator(input):
-  writeMdMessage({agent:"总协调员", type:"start", text:"开始抓取", flags:["DECISION","KEEP"]})
+  writeMdMessage({agent:"总协调员", type:"start", text:"开始抓取"})
 
   // 路径选择：由协调员自主决定顺序，可直接动态或静态
   if prefer_dynamic_or_code_suggests_dynamic:
@@ -180,7 +164,7 @@ Coordinator(input):
   HAF = 人类验收流程.run({algorithmNameOrMd, pageUrl: input.url, headers: N.headers})
   if HAF.ok:
     writeMdMessage({agent:"总协调员", type:"final", text:`输出 ${HAF.filePath}`,
-      payload:{file:HAF.filePath, variant:HAF.selectedVariant}, flags:["FINAL","CRITICAL","KEEP"]})
+      payload:{file:HAF.filePath, variant:HAF.selectedVariant}})
   else:
     诊断员.proposeFix(HAF.notes)
     fallback or retry
@@ -188,26 +172,20 @@ Coordinator(input):
   // 上下文管理
   msgs = readMdMessages(all)
   if est_tokens(msgs) > TOKEN_BUDGET:
-    msgs = 裁剪员.crop(msgs, windowSize=N, keepFlags=CRITICAL_SET)
-    if est_tokens(msgs) > TOKEN_BUDGET:
-      summary = 压缩员.compress(msgs, budget=TOKEN_BUDGET, keepFlags=CRITICAL_SET)
-      writeMdMessage(summary)
+    msgs = 裁剪员.crop(msgs, windowSize=N)
 ```
 
 ## 7. 错误模型与回退策略
-- `input_limit`：在 LLM 调用层面捕获并记录；触发裁剪/压缩；或仅检索关键标记再补充。
+- `input_limit`：在 LLM 调用层面捕获并记录；触发裁剪。
 - `network_403/401`：尝试追加必要请求头或 Cookie；重试策略指数退避；必要时停。
 - `drm_protected`：标记 `!CRITICAL !ERROR DRM`；终止下载流程并输出合规提示。
 - `manifest_parse_error`：更换解析器或采用动态抓包结果回退；记录员标注 `!ERROR`。
 - `variants_empty`：降级至抓包员独立结果或提示站点适配需求。
 
-## 8. 关键标记清单与保留规则
-- `CRITICAL`：必须保留原文或关键片段（不可仅摘要）。
-- `DECISION`：必须保留（可摘要但需含结论与依据引用）。
-- `FINAL`：最终产出与结论，必须保留原文。
-- `KEEP`：指示无论裁剪/压缩均保留（原文优先）。
-- `ERROR`：错误诊断信息必须保留（可简化堆栈但保留类型与上下文）。
-- `CANDIDATE`：候选清单或 URL，至少保留一个代表样本及汇总。
+## 8. 保留规则
+- 保留决策与依据、最终产出、错误诊断原文。
+- 保留候选清单的代表样本与汇总。
+- 非关键日志按窗口裁剪。
 
 ## 9. 安全与合规
 - 明确禁止绕过 DRM/付费保护；检测到后立即终止并记录。
@@ -225,7 +203,6 @@ Coordinator(input):
 ## 11. 命名对照（便于沟通）
 - 总协调员（Coordinator）
 - 对话记录员（Recorder）
-- 历史压缩员（Compressor）
 - 上下文裁剪员（Cropper）
 - HTML 解析员（Static Parser）
 - 动态抓包员（Network Capture）
@@ -234,7 +211,7 @@ Coordinator(input):
 
 ---
 
-附注：本蓝图假设 `agents.md` 作为唯一共享语境文件，并通过关键标记系统实现“压缩/裁剪但不丢失关键事实”。后续实现中可将 `agents.md` 与 `trace.json` 并用：前者高可读，后者高可检索/编程。
+附注：本蓝图假设 `agents.md` 作为唯一共享语境文件，并通过保留关键消息实现“裁剪但不丢失关键事实”。后续实现中可将 `agents.md` 与 `trace.json` 并用：前者高可读，后者高可检索/编程。
 
 ```md
 // 代码维护（在有明确算法实现时写入；不可用时重置）
