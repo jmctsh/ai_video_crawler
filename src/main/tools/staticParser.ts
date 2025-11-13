@@ -12,7 +12,20 @@ export function findManifestLinks(html: string): string[] {
 }
 
 export function extractHtmlCandidates(html: string): { candidates: string[]; playerParams?: any } {
-  const candidates = findManifestLinks(html)
+  const decode = (s: string) => s.replace(/\\/g, '/').replace(/\u002F/gi, '/')
+  const decoded = decode(html)
+  const candidates = findManifestLinks(decoded)
+  try {
+    const m = decoded.match(/var\s+player_aaaa\s*=\s*(\{[\s\S]*?\})/i)
+    if (m) {
+      const json = m[1]
+      const cfg = JSON.parse(json)
+      if (cfg && typeof cfg.url === 'string') {
+        const u = decode(cfg.url)
+        if (/\.m3u8(\?|$)/i.test(u) || /\.mpd(\?|$)/i.test(u)) candidates.push(u)
+      }
+    }
+  } catch {}
   // naive player params extraction (placeholder)
   const playerParams: any = undefined
   try {

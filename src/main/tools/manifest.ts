@@ -219,7 +219,16 @@ export function buildDashDownloadPlan(mpdContent: string, mpdUrl: string): DashP
 }
 
 export async function buildDownloadPlan(args: { url: string; headers?: Record<string, string> }): Promise<{ ok: boolean; plan?: HlsPlan | DashPlan; kind?: 'hls' | 'dash'; notes?: string }> {
-  const { url, headers } = args
+  const { headers } = args
+  const unwrap = (u: string): string => {
+    try {
+      const ur = new URL(u)
+      const inner = ur.searchParams.get('url') || ur.searchParams.get('u') || ur.searchParams.get('v')
+      if (inner && /^https?:/i.test(inner)) return inner
+    } catch {}
+    return u
+  }
+  const url = unwrap(args.url)
   const fetched = await fetchManifestContent(url, headers)
   if (!fetched.ok || !fetched.content) return { ok: false, notes: fetched.notes || 'fetch failed' }
   if (fetched.kind === 'hls') {

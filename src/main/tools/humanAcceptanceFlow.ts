@@ -3,6 +3,7 @@ import path from 'path'
 import vm from 'vm'
 import { BrowserWindow, ipcMain } from 'electron'
 import { fetchManifestContent, parseManifest, parseHlsMediaPlaylist, parseHlsManifest, Variant } from './manifest'
+import { extractHtmlCandidates } from './staticParser'
 import { appendDebug } from './debugMonitor'
 import { downloadAndMerge, runStoredAlgorithm } from './downloader'
 import { writeMdMessage } from './agentsMd'
@@ -96,10 +97,73 @@ export async function buildVariantsFromAlgorithmMd(args: {
   if (directUrl) {
   }
   if (!manifestUrl) {
+    // Fallback: try static HTML extraction if pageUrl provided
+    if (args.pageUrl) {
+      try {
+        const resHtml = await fetch(args.pageUrl, { headers: usedHeaders })
+        const html = await (resHtml as any).text()
+        const { candidates } = extractHtmlCandidates(html)
+        const headerNote = usedHeaders ? `headers: ${Object.keys(usedHeaders).join(',')}` : 'no headers'
+        const unwrap = (u: string): string => {
+          try { const ur = new URL(u); const inner = ur.searchParams.get('url') || ur.searchParams.get('u') || ur.searchParams.get('v'); if (inner && /^https?:/i.test(inner)) return inner } catch {} ; return u
+        }
+        for (let i = 0; i < Math.min(candidates.length, 5); i++) {
+          const raw = candidates[i]
+          const u = unwrap(raw)
+          const isHls = /\.m3u8(\?|$)/i.test(u)
+          const isDash = /\.mpd(\?|$)/i.test(u)
+          let vItem: AcceptanceVariant = { id: `cand_${i}`, kind: (isDash ? 'dash' : (isHls ? 'hls' : 'direct')), url: u, name: isHls ? 'HLS Playlist' : (isDash ? 'DASH Manifest' : 'Direct Media'), notes: headerNote }
+          try {
+            const fetched = await fetchManifestContent(u, usedHeaders)
+            if (fetched.ok && fetched.content) {
+              if ((isHls || fetched.kind === 'hls')) {
+                if (/EXT-X-STREAM-INF/.test(fetched.content)) {
+                  const { variants: hvars } = parseHlsManifest(fetched.content)
+                  if (hvars.length) {
+                    const h0 = hvars[0]
+                    vItem.res = h0.res
+                    vItem.br = h0.br
+                    vItem.name = `${h0.res ? `${h0.res.width}x${h0.res.height}` : 'HLS'} @ ${h0.br ? `${h0.br.toFixed(2)}Mbps` : '?'}`
+                  }
+                } else {
+                  const media = parseHlsMediaPlaylist(fetched.content, u)
+                  const segmentsCount = media.segments.length
+                  const tgt = media.targetDuration || 4
+                  const totalDurationSec = Math.max(segmentsCount * tgt, tgt)
+                  const brMbps = 2
+                  vItem.sizeApproxBytes = Math.floor(brMbps * 1024 * 1024 * totalDurationSec)
+                  vItem.name = `HLS Playlist (~${(totalDurationSec/60).toFixed(0)}min)`
+                }
+              } else if ((isDash || fetched.kind === 'dash')) {
+                const parsedDash = parseManifest({ content: fetched.content })
+                if (parsedDash.variants.length) {
+                  const d0 = parsedDash.variants[0]
+                  vItem.res = d0.res
+                  vItem.br = d0.br
+                  vItem.name = `${d0.res ? `${d0.res.width}x${d0.res.height}` : 'DASH'} @ ${d0.br ? `${d0.br.toFixed(2)}Mbps` : '?'}`
+                }
+              }
+            }
+          } catch {}
+          variants.push(vItem)
+        }
+        appendDebug(dbg, 'static_fallback_candidates', `count=${candidates.length}`, { sample: candidates.slice(0, 3) })
+        if (variants.length) return { variants, notes: 'fallback from static html candidates' }
+      } catch {}
+    }
     appendDebug(dbg, 'algorithm_exec_failed', 'md produced no manifest/direct')
     return { variants, notes: directUrl ? 'direct only' : 'algorithm produced no manifest/direct' }
   }
-  const fetched = await fetchManifestContent(manifestUrl, usedHeaders)
+  const unwrap = (u: string): string => {
+    try {
+      const ur = new URL(u)
+      const inner = ur.searchParams.get('url') || ur.searchParams.get('u') || ur.searchParams.get('v')
+      if (inner && /^https?:/i.test(inner)) return inner
+    } catch {}
+    return u
+  }
+  const baseUrl = unwrap(manifestUrl)
+  const fetched = await fetchManifestContent(baseUrl, usedHeaders)
   if (!fetched.ok || !fetched.content) {
     if (directUrl) return { variants, manifestUrl, kind: 'direct', notes: fetched.notes || 'fetch manifest failed; fallback to direct' }
     return { variants, manifestUrl, notes: fetched.notes || 'fetch manifest failed' }
@@ -133,7 +197,7 @@ export async function buildVariantsFromAlgorithmMd(args: {
     } else {
       for (let i = 0; i < hlsVars.length; i++) {
         const v: Variant = hlsVars[i]
-        const playlistUrl = v.uri ? new URL(v.uri, manifestUrl).toString() : manifestUrl
+        const playlistUrl = v.uri ? new URL(v.uri, baseUrl).toString() : baseUrl
         let sizeApproxBytes: number | undefined
         try {
           const pl = await fetchManifestContent(playlistUrl, usedHeaders)
@@ -221,7 +285,15 @@ export async function buildVariantsFromStoredAlgorithm(args: {
   }
   if (!manifestUrl) return { variants, notes: directUrl ? 'direct only' : 'algorithm produced no manifest/direct' }
 
-  const fetched = await fetchManifestContent(manifestUrl, usedHeaders)
+  const baseUrl = ((): string => {
+    try {
+      const ur = new URL(manifestUrl)
+      const inner = ur.searchParams.get('url') || ur.searchParams.get('u') || ur.searchParams.get('v')
+      if (inner && /^https?:/i.test(inner)) return inner
+    } catch {}
+    return manifestUrl
+  })()
+  const fetched = await fetchManifestContent(baseUrl, usedHeaders)
   if (!fetched.ok || !fetched.content) {
     if (directUrl) return { variants, manifestUrl, kind: 'direct', notes: fetched.notes || 'fetch manifest failed; fallback to direct' }
     return { variants, manifestUrl, notes: fetched.notes || 'fetch manifest failed' }
@@ -255,7 +327,7 @@ export async function buildVariantsFromStoredAlgorithm(args: {
     } else {
       for (let i = 0; i < hlsVars.length; i++) {
         const v: Variant = hlsVars[i]
-        const playlistUrl = v.uri ? new URL(v.uri, manifestUrl).toString() : manifestUrl
+        const playlistUrl = v.uri ? new URL(v.uri, baseUrl).toString() : baseUrl
         let sizeApproxBytes: number | undefined
         try {
           const pl = await fetchManifestContent(playlistUrl, usedHeaders)

@@ -188,8 +188,81 @@ export async function startCoordinatorLLM(input: CoordinatorInput): Promise<{ ru
 
   // Simple tool registry (local handlers)
   const tools = {
+    async fetch_page_html(args: any) {
+      const url = String(args?.url || input.url || input.exampleUrl || '')
+      const headers = args?.headers || undefined
+      if (!url) return { ok: false, html: '', notes: 'no url' }
+      const http = await import('http')
+      const https = await import('https')
+      const client = url.startsWith('https') ? (https as any).default : (http as any).default
+      return new Promise((resolve) => {
+        const req = client.get(url, { headers }, (res: any) => {
+          if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            const loc = res.headers.location
+            res.resume()
+            const next = loc.startsWith('http') ? loc : new URL(loc, url).toString()
+            ;(tools as any).fetch_page_html({ url: next, headers }).then(resolve)
+            return
+          }
+          if ((res.statusCode || 0) >= 400) {
+            res.resume()
+            resolve({ ok: false, html: '', notes: `http ${res.statusCode}` })
+            return
+          }
+          let data = ''
+          res.setEncoding('utf-8')
+          res.on('data', (chunk: any) => {
+            data += chunk
+            if (data.length > 180000) { try { res.destroy() } catch {} }
+          })
+          res.on('end', () => {
+            writeMdMessage({ agent: '静态解析引擎', type: 'html_fetched', text: `页面源抓取完成 ${data.length} chars` })
+            try { (input as any).html = data } catch {}
+            resolve({ ok: true, html: data })
+          })
+        })
+        req.on('error', (err: any) => resolve({ ok: false, html: '', notes: err?.message || String(err) }))
+      })
+    },
+    async read_debug_recent(args: any) {
+      try {
+        const limit = Number(args?.limit || 3)
+        const dir = path.join(getLogsDir(), 'debug', id)
+        const files = fs.existsSync(dir) ? fs.readdirSync(dir) : []
+        const pick = (prefix: string) => files.filter(f => f.startsWith(prefix)).sort((a,b) => a.localeCompare(b))
+        const llmOuts = pick('llm_output_step_').slice(-limit)
+        const subNetOuts = pick('subagent_network').filter(f => /output_\d+\.md$/.test(f)).slice(-limit)
+        const subStaOuts = pick('subagent_static').filter(f => /output_\d+\.md$/.test(f)).slice(-limit)
+        const readText = (fp: string): string => {
+          try {
+            const full = path.join(dir, fp)
+            const raw = fs.readFileSync(full, 'utf-8')
+            return raw.slice(Math.max(0, raw.length - 4000))
+          } catch { return '' }
+        }
+        const llmOutputs = llmOuts.map(readText)
+        const subOutputs = [...subStaOuts.map(readText), ...subNetOuts.map(readText)]
+        const logDir = path.join(getLogsDir(), 'debug')
+        const logFiles = fs.existsSync(logDir) ? fs.readdirSync(logDir).filter(f => f.endsWith('.log')).slice(-limit) : []
+        const logTail = logFiles.map(f => {
+          try {
+            const full = path.join(logDir, f)
+            const raw = fs.readFileSync(full, 'utf-8')
+            const tail = raw.slice(Math.max(0, raw.length - 4000))
+            return { file: f, tail }
+          } catch { return { file: f, tail: '' } }
+        })
+        return { llmOutputs, subOutputs, logTail }
+      } catch {
+        return { llmOutputs: [], subOutputs: [], logTail: [] }
+      }
+    },
     async static_extract_html_candidates(args: any) {
-      const html = (args?.html ?? input.html ?? '') as string
+      let html = (args?.html ?? input.html ?? '') as string
+      if (!html && (input.url || input.exampleUrl)) {
+        const fetched = await (tools as any).fetch_page_html({ url: input.url || input.exampleUrl })
+        html = String(fetched?.html || '')
+      }
       if (!html) return { candidates: [] }
       const { candidates } = extractHtmlCandidates(html)
       writeMdMessage({ agent: 'HTML 解析员', type: 'candidates', text: `LLM请求：静态解析 ${candidates.length} 个`, payload: { candidates } })
@@ -274,10 +347,21 @@ export async function startCoordinatorLLM(input: CoordinatorInput): Promise<{ ru
         let output: any = null
         switch (toolName) {
           case 'static_extract_html_candidates': {
-            const html = (args2?.html ?? input.html ?? '') as string
+            let html = (args2?.html ?? input.html ?? '') as string
+            if (!html && (input.url || input.exampleUrl)) {
+              const fetched = await (tools as any).fetch_page_html({ url: input.url || input.exampleUrl })
+              html = String(fetched?.html || '')
+            }
             const { candidates } = extractHtmlCandidates(html)
-      writeMdMessage({ agent: '静态解析员(LLM)', type: 'candidates', text: `静态提取 ${candidates.length} 个`, payload: { candidates } })
+            writeMdMessage({ agent: '静态解析员(LLM)', type: 'candidates', text: `静态提取 ${candidates.length} 个`, payload: { candidates } })
             output = { candidates }
+            break
+          }
+          case 'fetch_page_html': {
+            const url2 = String(args2?.url || input.url || input.exampleUrl || '')
+            const res2 = await (tools as any).fetch_page_html({ url: url2, headers: args2?.headers })
+      writeMdMessage({ agent: '静态解析员(LLM)', type: 'html_fetched', text: res2.ok ? `页面源 ${url2} · ${String(res2.html || '').length} chars` : `抓取失败：${res2.notes || ''}` })
+            output = res2
             break
           }
           case 'call_static_parser_agent': {
@@ -723,6 +807,11 @@ export async function startCoordinatorLLM(input: CoordinatorInput): Promise<{ ru
       // Feed back to LLM
       messages.push({ role: 'user', content: `TOOL_OUTPUT(${toolName}): ${JSON.stringify(output)}` })
       if (json.comment) messages.push({ role: 'assistant', content: `COMMENT: ${String(json.comment)}` })
+      try {
+        const dbg = await (tools as any).read_debug_recent({ limit: 2 })
+        const dbgText = JSON.stringify(dbg)
+        messages.push({ role: 'assistant', content: `DEBUG_RECENT: ${dbgText}` })
+      } catch {}
 
       // Early finalize if we got manifest candidates
       if ((toolName === 'static_extract_html_candidates' || toolName === 'call_static_parser_agent') && Array.isArray(output?.candidates) && output.candidates.length) {

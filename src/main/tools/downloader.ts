@@ -465,6 +465,14 @@ export async function runStoredAlgorithm(pageUrl: string, headers?: Record<strin
           }
           throw new Error('unreachable')
         },
+        async fetch(u: string, opts?: { headers?: Record<string,string> }) {
+          try {
+            const txt = await (this as any).getText(u, opts?.headers)
+            return { status: 200, headers: {}, async text() { return txt } }
+          } catch (e: any) {
+            return { status: 500, headers: {}, async text() { return '' } }
+          }
+        },
       },
     }
     const context = vm.createContext(sandbox)

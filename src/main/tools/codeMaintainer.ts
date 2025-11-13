@@ -393,7 +393,7 @@ export function finalizeAlgorithmIntoStorePick(args?: { pick?: 'static' | 'dynam
     throw new Error(`Algorithm name conflict: ${targetName}`)
   }
   if (!targetName) {
-    targetName = existing.length ? existing[Math.floor(Math.random() * existing.length)].name : `algo_${Math.random().toString(36).slice(2, 8)}`
+    targetName = `algo_${Date.now()}`
   }
   writeAlgorithmFile(targetName, code, 'js')
   writeMdMessage({ agent: '代码维护员', type: 'finalize', text: `提交最终${pick === 'static' ? '静态' : '动态'}算法代码到主程序：${targetName}`, payload: { name: targetName, pick } })

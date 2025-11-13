@@ -38,8 +38,10 @@ export function buildStaticParserAgentPrompt(ctx: SubAgentPromptCtx): string {
 可调用工具（由总协调员执行）：
 - static_extract_html_candidates: 入参 {html?: string}；输出 {candidates: string[], playerParams?: any}
 - call_static_parser_agent: 入参 {html?: string}；输出同上；用于强调走“静态解析子智能体”。
+- fetch_page_html: 入参 {url?: string, headers?: Record<string,string>}；输出 {ok, html}；当未提供 HTML 时先抓取页面源。
 - code_maintainer_agent_write: 写入算法代码段；args.target="static"；字段 {title, code, language, meta}
 - record_message: 将重要说明写入 agents.md（提示MD）。
+ - read_debug_recent: 入参 {limit?: number}；输出最近 LLM/子智能体/调试日志尾部；用于根据失败轨迹修正代码。
 
 输出 JSON 规范与示例（请直接按以下格式输出，无代码围栏）：
 示例（提取候选）：
@@ -94,6 +96,7 @@ export function buildNetworkCaptureAgentPrompt(ctx: SubAgentPromptCtx): string {
 - call_html_preprocessor: 当异常诊断员判定“输入超限”时由协调员调用；对过长 HTML 做预处理并覆盖 agents.md 的提示用源，原始 HTML 保留在 agents_raw.md。入参 {html?, maxChars?}；输出 {processed, originalChars, processedChars, removedBytes, notes}
 - code_maintainer_agent_write: 写入算法代码段；args.target="dynamic"；字段 {title, code, language, meta}
 - record_message: 将说明与抓包要点写入 agents.md。
+ - read_debug_recent: 入参 {limit?: number}；输出最近 LLM/子智能体/调试日志尾部；用于根据失败轨迹修正代码。
 
 输出 JSON 规范与示例（请直接按以下格式输出，无代码围栏）：
 示例（抓包）：

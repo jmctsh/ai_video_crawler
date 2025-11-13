@@ -33,8 +33,8 @@ export function listAlgorithms(): AlgoInfo[] {
     const st = fs.statSync(full)
     out.push({ name: stripExt(f), createdAt: st.mtimeMs })
   }
-  // 新的在后（按创建/修改时间升序）
-  out.sort((a, b) => a.createdAt - b.createdAt)
+  // 新的在前（按创建/修改时间降序），便于最近算法优先显示
+  out.sort((a, b) => b.createdAt - a.createdAt)
   return out
 }
 
