@@ -87,18 +87,6 @@ d:\ai_video_crawer
 └── README.md       # 本文件
 ```
 
-## 故障排查
-
-- Electron 白屏或无法加载：确认 `http://localhost:5173/` 正常；避免端口被占用。
-- LLM 报错“Missing ARK_API_KEY”：在“API 管理”页填写并保存，或手动在 `.env` 设置。
-- Embeddings 相关问题：本项目已移除 RAG/Embedding 模块，无需配置 `ARK_EMBED_MODEL_ID`。
-- 下载后未生成 MP4：确认 `ffmpeg` 存在；程序会在不支持 `ffmpeg` 时退化为 TS 拼接（质量可能下降）。
- - 算法名重名：若提交时报“算法名已存在”，请在“算法制作”页更换唯一名称，或在 `algorithms/` 文件夹中手动清理/重命名冲突文件。
-
-## 许可证
-
-- 本项目使用 AGPL-3.0 许可证，详见 `LICENSE.txt`。
-
 ## 近期优化（2025-11-13）
 
 - 静态解析可用性
@@ -145,3 +133,7 @@ d:\ai_video_crawer
   - `src/main/tools/contextTools.ts`：自适应裁剪策略，保留关键消息，按预算动态收缩窗口。
 
 这些优化综合提升了可用性与稳定性：静态与动态路径都能产出可用清单，验收弹窗信息充分、下载路径正确，遇到失败也能通过调试闭环快速修正，整体流程最终稳定成功。
+
+## 许可证
+
+- 本项目使用 AGPL-3.0 许可证，详见 `LICENSE.txt`。
